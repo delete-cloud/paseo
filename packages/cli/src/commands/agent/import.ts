@@ -12,6 +12,10 @@ export function addImportOptions(cmd: Command): Command {
     .requiredOption("--provider <provider>", "Agent provider id")
     .option("--cwd <path>", "Working directory for providers that require it")
     .option(
+      "--workspace <id>",
+      "Existing workspace id to import into instead of creating a new workspace",
+    )
+    .option(
       "--label <key=value>",
       "Add label(s) to the agent (can be used multiple times)",
       collectMultiple,
@@ -22,6 +26,7 @@ export function addImportOptions(cmd: Command): Command {
 export interface AgentImportOptions extends CommandOptions {
   provider?: string;
   cwd?: string;
+  workspace?: string;
   label?: string[];
   host?: string;
 }
@@ -94,6 +99,24 @@ export function resolveImportCwd(explicitCwd: string | undefined, defaultCwd: st
   return cwd;
 }
 
+export function resolveImportWorkspaceId(
+  explicitWorkspace: string | undefined,
+): string | undefined {
+  if (explicitWorkspace === undefined) {
+    return undefined;
+  }
+
+  const workspaceId = explicitWorkspace.trim();
+  if (!workspaceId) {
+    throw {
+      code: "INVALID_WORKSPACE",
+      message: "--workspace cannot be empty",
+      details: "Provide an existing workspace id or omit --workspace",
+    } satisfies CommandError;
+  }
+  return workspaceId;
+}
+
 async function connectToDaemonOrThrow(
   hostOption: string | undefined,
   host: string,
@@ -127,6 +150,7 @@ export async function runImportCommand(
 
   const provider = parseImportProvider(options.provider);
   const cwd = resolveImportCwd(options.cwd, process.cwd());
+  const workspaceId = resolveImportWorkspaceId(options.workspace);
 
   const labels = parseImportLabels(options.label);
   const client = await connectToDaemonOrThrow(options.host, host);
@@ -136,6 +160,7 @@ export async function runImportCommand(
       provider,
       sessionId,
       cwd,
+      ...(workspaceId ? { workspaceId } : {}),
       ...(Object.keys(labels).length > 0 ? { labels } : {}),
     });
 

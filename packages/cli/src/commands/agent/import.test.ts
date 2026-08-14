@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { resolveImportCwd, runImportCommand } from "./import.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveImportCwd, resolveImportWorkspaceId, runImportCommand } from "./import.js";
 
 const importAgent = vi.fn();
 const close = vi.fn();
@@ -11,6 +11,11 @@ vi.mock("../../utils/client.js", () => ({
   })),
   getDaemonHost: vi.fn(() => "ws://127.0.0.1:6767"),
 }));
+
+beforeEach(() => {
+  importAgent.mockReset();
+  close.mockReset();
+});
 
 describe("resolveImportCwd", () => {
   it("uses the invoking process cwd when --cwd is omitted", () => {
@@ -30,8 +35,55 @@ describe("resolveImportCwd", () => {
       }),
     );
   });
+});
 
-  it("accepts pi as an import provider", async () => {
+describe("resolveImportWorkspaceId", () => {
+  it("omits workspace when --workspace is not passed", () => {
+    expect(resolveImportWorkspaceId(undefined)).toBeUndefined();
+  });
+
+  it("uses explicit --workspace when provided", () => {
+    expect(resolveImportWorkspaceId(" wks_abc ")).toBe("wks_abc");
+  });
+
+  it("rejects an empty explicit --workspace", () => {
+    expect(() => resolveImportWorkspaceId("  ")).toThrow(
+      expect.objectContaining({
+        code: "INVALID_WORKSPACE",
+      }),
+    );
+  });
+});
+
+describe("runImportCommand workspace", () => {
+  it("forwards --workspace to importAgent", async () => {
+    importAgent.mockResolvedValueOnce({
+      id: "agent-2",
+      status: "idle",
+      provider: "codex",
+      cwd: "/tmp/project",
+      title: "Imported Codex session",
+    });
+
+    await runImportCommand(
+      "codex-session-1",
+      {
+        provider: "codex",
+        cwd: "/tmp/project",
+        workspace: "wks_existing",
+      },
+      {} as never,
+    );
+
+    expect(importAgent).toHaveBeenCalledWith({
+      provider: "codex",
+      sessionId: "codex-session-1",
+      cwd: "/tmp/project",
+      workspaceId: "wks_existing",
+    });
+  });
+
+  it("does not send workspaceId when --workspace is omitted", async () => {
     importAgent.mockResolvedValueOnce({
       id: "agent-1",
       status: "idle",
